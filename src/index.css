@@ -408,9 +408,15 @@ code {
 
 .result-card__toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: flex-start;
   gap: 16px;
+}
+
+.result-card__footer-action {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
 }
 
 .pill-group,
@@ -702,10 +708,6 @@ code {
   .result-card__toolbar {
     grid-template-columns: 1fr;
     display: grid;
-  }
-
-  .icon-button {
-    justify-self: start;
   }
 
   .metadata-row {

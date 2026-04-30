@@ -396,17 +396,6 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
               Showing {numberFormatter.format(visibleRenderedRows)} of {numberFormatter.format(totalRenderableRows)} diff rows
             </span>
           </div>
-          {shouldShowExpand ? (
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
-              title={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
-              onClick={() => setIsExpanded((current) => !current)}
-            >
-              {isExpanded ? '⤡' : '⤢'}
-            </button>
-          ) : null}
         </div>
 
         {diff.note ? <p className="callout">{diff.note}</p> : null}
@@ -414,6 +403,20 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
         <ChangedRowsTable rows={visibleChangedRows} columns={diff.columns} totalCount={diff.changedRows.length} />
         <RowPreviewTable title="Rows only in left" rows={visibleOnlyInLeft} columns={diff.columns} totalCount={diff.onlyInLeft.length} />
         <RowPreviewTable title="Rows only in right" rows={visibleOnlyInRight} columns={diff.columns} totalCount={diff.onlyInRight.length} />
+
+        {shouldShowExpand ? (
+          <div className="result-card__footer-action">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
+              title={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
+              onClick={() => setIsExpanded((current) => !current)}
+            >
+              {isExpanded ? '^' : 'v'}
+            </button>
+          </div>
+        ) : null}
       </div>
     </details>
   );

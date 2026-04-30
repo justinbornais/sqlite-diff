@@ -383,6 +383,25 @@ code {
   display: none;
 }
 
+.result-card__summary-text {
+  min-width: 0;
+}
+
+.result-card__summary-text--inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.result-card__summary-text strong {
+  flex: 0 0 auto;
+}
+
+.result-card__summary-text span {
+  min-width: 0;
+}
+
 .result-card__content {
   padding: 0 24px 24px;
 }
@@ -442,6 +461,48 @@ code {
 .result-card h3,
 .empty-state h2 {
   margin: 0 0 10px;
+}
+
+.schema-change-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.schema-change-card__header .pill-group {
+  justify-content: flex-end;
+}
+
+.schema-signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.schema-signature-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.schema-signature-block span {
+  color: #95a8ae;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.schema-signature-block code {
+  display: block;
+  color: #f2f5f5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
 }
 
 .schema-change-card p,
@@ -609,6 +670,12 @@ code {
 
   .option-toggle {
     width: 100%;
+  }
+
+  .schema-change-card__header,
+  .schema-signature-grid {
+    grid-template-columns: 1fr;
+    display: grid;
   }
 
   .metadata-row {

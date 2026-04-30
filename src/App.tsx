@@ -242,7 +242,7 @@ function SchemaDiffCard({ diff }: { diff: SchemaTableDiff }) {
   return (
     <details className="result-card" open>
       <summary>
-        <div>
+        <div className="result-card__summary-text result-card__summary-text--inline">
           <strong>{diff.tableName}</strong>
           <span>{diff.summary}</span>
         </div>
@@ -264,10 +264,24 @@ function SchemaDiffCard({ diff }: { diff: SchemaTableDiff }) {
           <div className="schema-grid">
             {diff.columns.changed.map((column) => (
               <article key={column.columnName} className="schema-change-card">
-                <h4>{column.columnName}</h4>
-                <p>{column.differences.join(' • ')}</p>
-                <code>{column.leftSignature}</code>
-                <code>{column.rightSignature}</code>
+                <div className="schema-change-card__header">
+                  <h4>{column.columnName}</h4>
+                  <div className="pill-group">
+                    {column.differences.map((difference) => (
+                      <span key={difference} className="pill pill--warn">{difference}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="schema-signature-grid">
+                  <div className="schema-signature-block">
+                    <span>Left</span>
+                    <code>{column.leftSignature}</code>
+                  </div>
+                  <div className="schema-signature-block">
+                    <span>Right</span>
+                    <code>{column.rightSignature}</code>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
@@ -314,7 +328,7 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
   return (
     <details className="result-card" open>
       <summary>
-        <div>
+        <div className="result-card__summary-text result-card__summary-text--inline">
           <strong>{diff.tableName}</strong>
           <span>
             {numberFormatter.format(diff.onlyInLeftCount)} left-only • {numberFormatter.format(diff.onlyInRightCount)} right-only •{' '}

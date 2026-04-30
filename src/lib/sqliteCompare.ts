@@ -63,7 +63,8 @@ export type SchemaTableDiff = {
 export type DataTableDiff = {
   tableName: string;
   columns: string[];
-  keyMode: 'primary-key' | 'full-row';
+  keyMode: 'primary-key' | 'unique-index' | 'row-order' | 'full-row';
+  keyLabel: string;
   note?: string;
   leftRowCount: number;
   rightRowCount: number;
@@ -143,6 +144,12 @@ type TableSnapshot = {
   columns: TableColumn[];
   indexes: TableIndex[];
   foreignKeys: ForeignKey[];
+};
+
+type RowMatchStrategy = {
+  mode: DataTableDiff['keyMode'];
+  keyLabel: string;
+  keyColumns: string[];
 };
 
 type DatabaseMetadata = Record<string, string>;
@@ -528,11 +535,11 @@ function compareSingleTableData(
   const comparableColumns = buildComparableColumnList(leftColumns, rightColumns);
   const leftRows = normalizeRows(queryTableRows(leftDatabase, tableName, leftColumns), comparableColumns);
   const rightRows = normalizeRows(queryTableRows(rightDatabase, tableName, rightColumns), comparableColumns);
-  const primaryKeyColumns = getSharedPrimaryKeyColumns(leftTable, rightTable);
+  const rowMatchStrategy = getRowMatchStrategy(leftTable, rightTable);
 
-  if (primaryKeyColumns.length > 0) {
-    const leftMap = new Map(leftRows.map((row) => [buildRowKey(row, primaryKeyColumns), row]));
-    const rightMap = new Map(rightRows.map((row) => [buildRowKey(row, primaryKeyColumns), row]));
+  if (rowMatchStrategy) {
+    const leftMap = new Map(leftRows.map((row) => [buildRowKey(row, rowMatchStrategy.keyColumns), row]));
+    const rightMap = new Map(rightRows.map((row) => [buildRowKey(row, rowMatchStrategy.keyColumns), row]));
     const keys = new Set([...leftMap.keys(), ...rightMap.keys()]);
     const onlyInLeft: RowPreview[] = [];
     const onlyInRight: RowPreview[] = [];
@@ -571,7 +578,7 @@ function compareSingleTableData(
         if (changedRows.length < MAX_SAMPLE_ROWS) {
           changedRows.push({
             key,
-            keyLabel: primaryKeyColumns.join(', '),
+            keyLabel: rowMatchStrategy.keyLabel,
             differingColumns,
             left: { key, values: leftRow },
             right: { key, values: rightRow },
@@ -587,10 +594,11 @@ function compareSingleTableData(
     return {
       tableName,
       columns: comparableColumns,
-      keyMode: 'primary-key',
+      keyMode: rowMatchStrategy.mode,
+      keyLabel: rowMatchStrategy.keyLabel,
       note:
         sharedColumns.length === 0
-          ? 'No columns are shared between these table definitions. Matching rows are still aligned by primary key and missing columns are shown explicitly.'
+          ? `No columns are shared between these table definitions. Matching rows are still aligned by ${rowMatchStrategy.keyLabel.toLowerCase()} and missing columns are shown explicitly.`
           : undefined,
       leftRowCount: leftRows.length,
       rightRowCount: rightRows.length,
@@ -605,6 +613,35 @@ function compareSingleTableData(
 
   const leftCounter = buildRowMultiset(leftRows, comparableColumns);
   const rightCounter = buildRowMultiset(rightRows, comparableColumns);
+  const multisetDifference = compareRowMultisets(leftCounter, rightCounter);
+
+  if (!multisetDifference.hasDifferences) {
+    return null;
+  }
+
+  const rowOrderDiff = compareRowsByPosition(leftRows, rightRows, comparableColumns);
+
+  if (rowOrderDiff.changedCount > 0 || rowOrderDiff.onlyInLeftCount > 0 || rowOrderDiff.onlyInRightCount > 0) {
+    return {
+      tableName,
+      columns: comparableColumns,
+      keyMode: 'row-order',
+      keyLabel: 'row position',
+      note:
+        sharedColumns.length === 0
+          ? 'These tables share no column names or unique row key. Rows are compared by position and missing columns are shown explicitly.'
+          : 'No shared primary key or unique index was found, so rows are compared by position after confirming the table contents are not just reordered.',
+      leftRowCount: leftRows.length,
+      rightRowCount: rightRows.length,
+      onlyInLeftCount: rowOrderDiff.onlyInLeftCount,
+      onlyInRightCount: rowOrderDiff.onlyInRightCount,
+      changedCount: rowOrderDiff.changedCount,
+      onlyInLeft: rowOrderDiff.onlyInLeft,
+      onlyInRight: rowOrderDiff.onlyInRight,
+      changedRows: rowOrderDiff.changedRows,
+    };
+  }
+
   const signatures = new Set([...leftCounter.keys(), ...rightCounter.keys()]);
   const onlyInLeft: RowPreview[] = [];
   const onlyInRight: RowPreview[] = [];
@@ -631,18 +668,15 @@ function compareSingleTableData(
     }
   }
 
-  if (onlyInLeftCount === 0 && onlyInRightCount === 0) {
-    return null;
-  }
-
   return {
     tableName,
     columns: comparableColumns,
     keyMode: 'full-row',
+    keyLabel: 'full row snapshot',
     note:
       sharedColumns.length === 0
         ? 'These tables share no column names and no shared primary key, so every row is compared as a full-row snapshot with missing columns shown explicitly.'
-        : 'This table has no shared primary key definition, so differences are shown as unmatched full rows.',
+        : 'No shared primary key, unique index, or stable row alignment was found, so differences are shown as unmatched full rows.',
     leftRowCount: leftRows.length,
     rightRowCount: rightRows.length,
     onlyInLeftCount,
@@ -756,6 +790,46 @@ function getSharedPrimaryKeyColumns(left: TableSnapshot, right: TableSnapshot) {
   return leftPrimaryKey.length > 0 && leftPrimaryKey.join('|') === rightPrimaryKey.join('|') ? leftPrimaryKey : [];
 }
 
+function getSharedUniqueIndexColumns(left: TableSnapshot, right: TableSnapshot) {
+  const leftUniqueIndexes = left.indexes
+    .filter((index) => index.unique && index.columns.length > 0)
+    .map((index) => index.columns.join('|'));
+  const rightUniqueIndexSet = new Set(
+    right.indexes.filter((index) => index.unique && index.columns.length > 0).map((index) => index.columns.join('|')),
+  );
+
+  const sharedUniqueIndexes = leftUniqueIndexes.filter((signature) => rightUniqueIndexSet.has(signature));
+  if (sharedUniqueIndexes.length === 0) {
+    return [];
+  }
+
+  return sharedUniqueIndexes
+    .sort((leftSignature, rightSignature) => leftSignature.split('|').length - rightSignature.split('|').length || leftSignature.localeCompare(rightSignature))[0]
+    .split('|');
+}
+
+function getRowMatchStrategy(left: TableSnapshot, right: TableSnapshot): RowMatchStrategy | null {
+  const primaryKeyColumns = getSharedPrimaryKeyColumns(left, right);
+  if (primaryKeyColumns.length > 0) {
+    return {
+      mode: 'primary-key',
+      keyLabel: primaryKeyColumns.join(', '),
+      keyColumns: primaryKeyColumns,
+    };
+  }
+
+  const uniqueIndexColumns = getSharedUniqueIndexColumns(left, right);
+  if (uniqueIndexColumns.length > 0) {
+    return {
+      mode: 'unique-index',
+      keyLabel: uniqueIndexColumns.join(', '),
+      keyColumns: uniqueIndexColumns,
+    };
+  }
+
+  return null;
+}
+
 function buildRowKey(row: Record<string, string>, keyColumns: string[]) {
   return keyColumns.map((column) => `${column}=${row[column] ?? 'NULL'}`).join(' | ');
 }
@@ -774,6 +848,78 @@ function buildRowMultiset(rows: Array<Record<string, string>>, columns: string[]
   }
 
   return multiset;
+}
+
+function compareRowMultisets(leftCounter: Map<string, RowPreview[]>, rightCounter: Map<string, RowPreview[]>) {
+  const signatures = new Set([...leftCounter.keys(), ...rightCounter.keys()]);
+
+  for (const signature of signatures) {
+    if ((leftCounter.get(signature)?.length ?? 0) !== (rightCounter.get(signature)?.length ?? 0)) {
+      return { hasDifferences: true };
+    }
+  }
+
+  return { hasDifferences: false };
+}
+
+function compareRowsByPosition(
+  leftRows: Array<Record<string, string>>,
+  rightRows: Array<Record<string, string>>,
+  columns: string[],
+) {
+  const changedRows: ChangedRow[] = [];
+  const onlyInLeft: RowPreview[] = [];
+  const onlyInRight: RowPreview[] = [];
+  let changedCount = 0;
+  let onlyInLeftCount = 0;
+  let onlyInRightCount = 0;
+
+  const pairedRowCount = Math.min(leftRows.length, rightRows.length);
+  for (let index = 0; index < pairedRowCount; index += 1) {
+    const leftRow = leftRows[index];
+    const rightRow = rightRows[index];
+    const differingColumns = columns.filter((column) => (leftRow[column] ?? 'NULL') !== (rightRow[column] ?? 'NULL'));
+    if (differingColumns.length === 0) {
+      continue;
+    }
+
+    changedCount += 1;
+    if (changedRows.length < MAX_SAMPLE_ROWS) {
+      const key = `Row ${index + 1}`;
+      changedRows.push({
+        key,
+        keyLabel: 'row position',
+        differingColumns,
+        left: { key, values: leftRow },
+        right: { key, values: rightRow },
+      });
+    }
+  }
+
+  for (let index = pairedRowCount; index < leftRows.length; index += 1) {
+    onlyInLeftCount += 1;
+    if (onlyInLeft.length < MAX_SAMPLE_ROWS) {
+      const key = `Row ${index + 1}`;
+      onlyInLeft.push({ key, values: leftRows[index] });
+    }
+  }
+
+  for (let index = pairedRowCount; index < rightRows.length; index += 1) {
+    onlyInRightCount += 1;
+    if (onlyInRight.length < MAX_SAMPLE_ROWS) {
+      const key = `Row ${index + 1}`;
+      onlyInRight.push({ key, values: rightRows[index] });
+    }
+  }
+
+  return {
+    changedRows,
+    changedCount,
+    onlyInLeft,
+    onlyInLeftCount,
+    onlyInRight,
+    onlyInRightCount,
+  };
 }
 
 function buildComparableColumnList(leftColumns: string[], rightColumns: string[]) {

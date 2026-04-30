@@ -325,6 +325,15 @@ function SchemaDiffCard({ diff }: { diff: SchemaTableDiff }) {
 }
 
 function DataDiffCard({ diff }: { diff: DataTableDiff }) {
+  const keyModeLabel =
+    diff.keyMode === 'primary-key'
+      ? 'primary key'
+      : diff.keyMode === 'unique-index'
+        ? 'unique index'
+        : diff.keyMode === 'row-order'
+          ? 'row position'
+          : 'full-row snapshot';
+
   return (
     <details className="result-card" open>
       <summary>
@@ -339,7 +348,8 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
 
       <div className="result-card__content">
         <div className="stat-inline-row">
-          <span>Identity mode: {diff.keyMode === 'primary-key' ? 'primary key' : 'full-row match'}</span>
+          <span>Match mode: {keyModeLabel}</span>
+          <span>Match key: {diff.keyLabel}</span>
           <span>Left rows: {numberFormatter.format(diff.leftRowCount)}</span>
           <span>Right rows: {numberFormatter.format(diff.rightRowCount)}</span>
         </div>

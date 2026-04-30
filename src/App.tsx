@@ -17,6 +17,8 @@ const defaultOptions: CompareOptions = {
   data: false,
 };
 
+const DEFAULT_RENDERED_DIFF_ROWS = 20;
+
 const numberFormatter = new Intl.NumberFormat();
 
 function formatBytes(bytes: number) {
@@ -144,7 +146,17 @@ function KeyValueRow({ difference }: { difference: MetadataDifference }) {
   );
 }
 
-function RowPreviewTable({ title, rows, columns }: { title: string; rows: RowPreview[]; columns: string[] }) {
+function RowPreviewTable({
+  title,
+  rows,
+  columns,
+  totalCount,
+}: {
+  title: string;
+  rows: RowPreview[];
+  columns: string[];
+  totalCount: number;
+}) {
   if (rows.length === 0) {
     return null;
   }
@@ -153,7 +165,11 @@ function RowPreviewTable({ title, rows, columns }: { title: string; rows: RowPre
     <div className="table-panel">
       <div className="table-panel__header">
         <h4>{title}</h4>
-        <span>{numberFormatter.format(rows.length)} sample rows</span>
+        <span>
+          {rows.length === totalCount
+            ? `${numberFormatter.format(totalCount)} rows`
+            : `${numberFormatter.format(rows.length)} of ${numberFormatter.format(totalCount)} rows shown`}
+        </span>
       </div>
       <div className="grid-table-wrapper">
         <table className="grid-table">
@@ -179,7 +195,15 @@ function RowPreviewTable({ title, rows, columns }: { title: string; rows: RowPre
   );
 }
 
-function ChangedRowsTable({ rows, columns }: { rows: ChangedRow[]; columns: string[] }) {
+function ChangedRowsTable({
+  rows,
+  columns,
+  totalCount,
+}: {
+  rows: ChangedRow[];
+  columns: string[];
+  totalCount: number;
+}) {
   if (rows.length === 0) {
     return null;
   }
@@ -188,7 +212,11 @@ function ChangedRowsTable({ rows, columns }: { rows: ChangedRow[]; columns: stri
     <div className="table-panel">
       <div className="table-panel__header">
         <h4>Changed rows</h4>
-        <span>{numberFormatter.format(rows.length)} sample rows</span>
+        <span>
+          {rows.length === totalCount
+            ? `${numberFormatter.format(totalCount)} rows`
+            : `${numberFormatter.format(rows.length)} of ${numberFormatter.format(totalCount)} rows shown`}
+        </span>
       </div>
       <div className="changed-row-list">
         {rows.map((row, index) => (
@@ -325,6 +353,7 @@ function SchemaDiffCard({ diff }: { diff: SchemaTableDiff }) {
 }
 
 function DataDiffCard({ diff }: { diff: DataTableDiff }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const keyModeLabel =
     diff.keyMode === 'primary-key'
       ? 'primary key'
@@ -333,6 +362,16 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
         : diff.keyMode === 'row-order'
           ? 'row position'
           : 'full-row snapshot';
+    const totalRenderableRows = diff.changedRows.length + diff.onlyInLeft.length + diff.onlyInRight.length;
+    const shouldShowExpand = totalRenderableRows > DEFAULT_RENDERED_DIFF_ROWS;
+
+    let remainingRows = isExpanded ? Number.POSITIVE_INFINITY : DEFAULT_RENDERED_DIFF_ROWS;
+    const visibleChangedRows = diff.changedRows.slice(0, remainingRows);
+    remainingRows = Number.isFinite(remainingRows) ? Math.max(0, remainingRows - visibleChangedRows.length) : remainingRows;
+    const visibleOnlyInLeft = diff.onlyInLeft.slice(0, remainingRows);
+    remainingRows = Number.isFinite(remainingRows) ? Math.max(0, remainingRows - visibleOnlyInLeft.length) : remainingRows;
+    const visibleOnlyInRight = diff.onlyInRight.slice(0, remainingRows);
+    const visibleRenderedRows = visibleChangedRows.length + visibleOnlyInLeft.length + visibleOnlyInRight.length;
 
   return (
     <details className="result-card" open>
@@ -347,18 +386,34 @@ function DataDiffCard({ diff }: { diff: DataTableDiff }) {
       </summary>
 
       <div className="result-card__content">
-        <div className="stat-inline-row">
-          <span>Match mode: {keyModeLabel}</span>
-          <span>Match key: {diff.keyLabel}</span>
-          <span>Left rows: {numberFormatter.format(diff.leftRowCount)}</span>
-          <span>Right rows: {numberFormatter.format(diff.rightRowCount)}</span>
+        <div className="result-card__toolbar">
+          <div className="stat-inline-row">
+            <span>Match mode: {keyModeLabel}</span>
+            <span>Match key: {diff.keyLabel}</span>
+            <span>Left rows: {numberFormatter.format(diff.leftRowCount)}</span>
+            <span>Right rows: {numberFormatter.format(diff.rightRowCount)}</span>
+            <span>
+              Showing {numberFormatter.format(visibleRenderedRows)} of {numberFormatter.format(totalRenderableRows)} diff rows
+            </span>
+          </div>
+          {shouldShowExpand ? (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
+              title={isExpanded ? 'Collapse table differences' : 'Expand table differences'}
+              onClick={() => setIsExpanded((current) => !current)}
+            >
+              {isExpanded ? '⤡' : '⤢'}
+            </button>
+          ) : null}
         </div>
 
         {diff.note ? <p className="callout">{diff.note}</p> : null}
 
-        <ChangedRowsTable rows={diff.changedRows} columns={diff.columns} />
-        <RowPreviewTable title="Rows only in left" rows={diff.onlyInLeft} columns={diff.columns} />
-        <RowPreviewTable title="Rows only in right" rows={diff.onlyInRight} columns={diff.columns} />
+        <ChangedRowsTable rows={visibleChangedRows} columns={diff.columns} totalCount={diff.changedRows.length} />
+        <RowPreviewTable title="Rows only in left" rows={visibleOnlyInLeft} columns={diff.columns} totalCount={diff.onlyInLeft.length} />
+        <RowPreviewTable title="Rows only in right" rows={visibleOnlyInRight} columns={diff.columns} totalCount={diff.onlyInRight.length} />
       </div>
     </details>
   );

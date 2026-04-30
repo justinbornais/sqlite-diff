@@ -5,7 +5,6 @@ type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
 type SqliteDatabase = InstanceType<SqlJsModule['Database']>;
 type SqliteValue = string | number | Uint8Array | null;
 
-const MAX_SAMPLE_ROWS = 20;
 const INTERNAL_TABLE_PREFIX = 'sqlite_';
 const ABSENT_VALUE = '(missing)';
 
@@ -554,17 +553,13 @@ function compareSingleTableData(
 
       if (leftRow && !rightRow) {
         onlyInLeftCount += 1;
-        if (onlyInLeft.length < MAX_SAMPLE_ROWS) {
-          onlyInLeft.push({ key, values: leftRow });
-        }
+        onlyInLeft.push({ key, values: leftRow });
         continue;
       }
 
       if (!leftRow && rightRow) {
         onlyInRightCount += 1;
-        if (onlyInRight.length < MAX_SAMPLE_ROWS) {
-          onlyInRight.push({ key, values: rightRow });
-        }
+        onlyInRight.push({ key, values: rightRow });
         continue;
       }
 
@@ -575,15 +570,13 @@ function compareSingleTableData(
       const differingColumns = comparableColumns.filter((column) => (leftRow[column] ?? 'NULL') !== (rightRow[column] ?? 'NULL'));
       if (differingColumns.length > 0) {
         changedCount += 1;
-        if (changedRows.length < MAX_SAMPLE_ROWS) {
-          changedRows.push({
-            key,
-            keyLabel: rowMatchStrategy.keyLabel,
-            differingColumns,
-            left: { key, values: leftRow },
-            right: { key, values: rightRow },
-          });
-        }
+        changedRows.push({
+          key,
+          keyLabel: rowMatchStrategy.keyLabel,
+          differingColumns,
+          left: { key, values: leftRow },
+          right: { key, values: rightRow },
+        });
       }
     }
 
@@ -655,16 +648,12 @@ function compareSingleTableData(
 
     if (difference > 0) {
       onlyInLeftCount += difference;
-      if (onlyInLeft.length < MAX_SAMPLE_ROWS) {
-        onlyInLeft.push(...leftEntries.slice(0, Math.min(difference, MAX_SAMPLE_ROWS - onlyInLeft.length)));
-      }
+      onlyInLeft.push(...leftEntries.slice(0, difference));
     }
 
     if (difference < 0) {
       onlyInRightCount += Math.abs(difference);
-      if (onlyInRight.length < MAX_SAMPLE_ROWS) {
-        onlyInRight.push(...rightEntries.slice(0, Math.min(Math.abs(difference), MAX_SAMPLE_ROWS - onlyInRight.length)));
-      }
+      onlyInRight.push(...rightEntries.slice(0, Math.abs(difference)));
     }
   }
 
@@ -884,32 +873,26 @@ function compareRowsByPosition(
     }
 
     changedCount += 1;
-    if (changedRows.length < MAX_SAMPLE_ROWS) {
-      const key = `Row ${index + 1}`;
-      changedRows.push({
-        key,
-        keyLabel: 'row position',
-        differingColumns,
-        left: { key, values: leftRow },
-        right: { key, values: rightRow },
-      });
-    }
+    const key = `Row ${index + 1}`;
+    changedRows.push({
+      key,
+      keyLabel: 'row position',
+      differingColumns,
+      left: { key, values: leftRow },
+      right: { key, values: rightRow },
+    });
   }
 
   for (let index = pairedRowCount; index < leftRows.length; index += 1) {
     onlyInLeftCount += 1;
-    if (onlyInLeft.length < MAX_SAMPLE_ROWS) {
-      const key = `Row ${index + 1}`;
-      onlyInLeft.push({ key, values: leftRows[index] });
-    }
+    const key = `Row ${index + 1}`;
+    onlyInLeft.push({ key, values: leftRows[index] });
   }
 
   for (let index = pairedRowCount; index < rightRows.length; index += 1) {
     onlyInRightCount += 1;
-    if (onlyInRight.length < MAX_SAMPLE_ROWS) {
-      const key = `Row ${index + 1}`;
-      onlyInRight.push({ key, values: rightRows[index] });
-    }
+    const key = `Row ${index + 1}`;
+    onlyInRight.push({ key, values: rightRows[index] });
   }
 
   return {
